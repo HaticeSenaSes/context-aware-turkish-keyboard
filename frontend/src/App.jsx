@@ -41,6 +41,12 @@ const EXAMPLES = {
   gundelik: ["Bugün hava çok güzel", "Akşam ne yapıyorsun", "Kahve içelim mi"],
 };
 
+const DEFAULT_CONTACTS = [
+  { id: 1, name: "Hocam", context: "hoca", emoji: "👨‍🏫" },
+  { id: 2, name: "Kankam", context: "arkadas", emoji: "👫" },
+  { id: 3, name: "Müdürüm", context: "is", emoji: "💼" },
+];
+
 export default function App() {
   const [context, setContext] = useState("arkadas");
   const [text, setText] = useState("");
@@ -52,6 +58,16 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [warningLoading, setWarningLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [contacts, setContacts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('contacts');
+      return saved ? JSON.parse(saved) : DEFAULT_CONTACTS;
+    } catch { return DEFAULT_CONTACTS; }
+  });
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactContext, setNewContactContext] = useState("arkadas");
   const inputRef = useRef(null);
   const chatRef = useRef(null);
   const ctx = CONTEXTS[context];
@@ -65,7 +81,7 @@ export default function App() {
 
   useEffect(() => {
     if (!text.trim()) { setSuggestions([]); return; }
-    const t = setTimeout(fetchSuggestions, 200);
+    const t = setTimeout(fetchSuggestions, 300);
     return () => clearTimeout(t);
   }, [text, context]);
 
@@ -147,12 +163,41 @@ export default function App() {
     setText("");
     setSuggestions([]);
     setWarning(null);
-    // Mesaj gönderince uyarı kontrol et
     await checkWarning(msgText);
+  }
+
+  function addContact() {
+    if (!newContactName.trim()) return;
+    const contact = {
+      id: Date.now(),
+      name: newContactName,
+      context: newContactContext,
+      emoji: CONTEXTS[newContactContext].emoji
+    };
+    const updated = [...contacts, contact];
+    setContacts(updated);
+    try { localStorage.setItem('contacts', JSON.stringify(updated)); } catch {}
+    setNewContactName("");
+    setShowAddContact(false);
+  }
+
+  function deleteContact(id) {
+    const updated = contacts.filter(c => c.id !== id);
+    setContacts(updated);
+    try { localStorage.setItem('contacts', JSON.stringify(updated)); } catch {}
+  }
+
+  function selectContact(contact) {
+    setSelectedContact(contact);
+    setContext(contact.context);
+    setPage("chat");
+    setMessages([]);
+    setText("");
   }
 
   const navItems = [
     { id: "chat", label: "💬 Chat" },
+    { id: "contacts", label: "👤 Kişiler" },
     { id: "compare", label: "🔍 Karşılaştır" },
     { id: "research", label: "📊 Araştırma" },
   ];
@@ -165,17 +210,21 @@ export default function App() {
         <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-              {ctx.emoji}
+              {selectedContact ? selectedContact.emoji : ctx.emoji}
             </div>
             <div>
-              <div style={{ fontWeight: "bold", fontSize: 15 }}>Bağlam Duyarlı Öneri Sistemi</div>
-              <div style={{ fontSize: 11, opacity: 0.85 }}>Bitirme Projesi — WP Araştırması</div>
+              <div style={{ fontWeight: "bold", fontSize: 15 }}>
+                {selectedContact ? selectedContact.name : "Bağlam Duyarlı Öneri Sistemi"}
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.85 }}>
+                {selectedContact ? `${ctx.label} bağlamı` : "Bitirme Projesi — WP Araştırması"}
+              </div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
             {navItems.map(n => (
               <button key={n.id} onClick={() => setPage(n.id)} style={{
-                padding: "5px 12px", borderRadius: 14, border: "none", fontSize: 12,
+                padding: "4px 10px", borderRadius: 14, border: "none", fontSize: 11,
                 fontWeight: "bold", cursor: "pointer",
                 background: page === n.id ? "rgba(255,255,255,0.3)" : "transparent",
                 color: "white",
@@ -190,11 +239,11 @@ export default function App() {
       </div>
 
       {/* CONTEXT SELECTOR */}
-      {page !== "research" && (
+      {(page === "chat" || page === "compare") && (
         <div style={{ background: surface, borderBottom: `1px solid ${borderColor}`, padding: "8px 16px" }}>
           <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", gap: 8, overflowX: "auto" }}>
             {Object.entries(CONTEXTS).map(([key, val]) => (
-              <button key={key} onClick={() => { setContext(key); setCompareResult(null); setWarning(null); }} style={{
+              <button key={key} onClick={() => { setContext(key); setCompareResult(null); setWarning(null); setSelectedContact(null); }} style={{
                 padding: "6px 14px", borderRadius: 16, whiteSpace: "nowrap",
                 border: `2px solid ${context === key ? val.color : borderColor}`,
                 background: context === key ? val.light : surface,
@@ -215,7 +264,7 @@ export default function App() {
           <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: 16, maxWidth: 760, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
             <div style={{ textAlign: "center", marginBottom: 16 }}>
               <span style={{ background: darkMode ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.7)", padding: "4px 12px", borderRadius: 12, fontSize: 12, color: subText }}>
-                {ctx.emoji} {ctx.label} bağlamı aktif
+                {ctx.emoji} {selectedContact ? selectedContact.name + " — " : ""}{ctx.label} bağlamı aktif
               </span>
             </div>
 
@@ -253,27 +302,21 @@ export default function App() {
             ))}
           </div>
 
-          {/* AI WARNING */}
           {warning && (
             <div style={{ background: darkMode ? "#2d1b00" : "#FFF3E0", borderTop: `2px solid #FF9800`, padding: "10px 16px" }}>
-              <div style={{ maxWidth: 760, margin: "0 auto" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                  <span style={{ fontSize: 20 }}>⚠️</span>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: "bold", color: "#E65100" }}>{warning.message}</div>
-                    {warning.suggestion && (
-                      <div style={{ fontSize: 12, color: subText, marginTop: 4 }}>
-                        💡 Öneri: <em>{warning.suggestion}</em>
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={() => setWarning(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: subText, fontSize: 16 }}>✕</button>
+              <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>⚠️</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: "bold", color: "#E65100" }}>{warning.message}</div>
+                  {warning.suggestion && (
+                    <div style={{ fontSize: 12, color: subText, marginTop: 4 }}>💡 Öneri: <em>{warning.suggestion}</em></div>
+                  )}
                 </div>
+                <button onClick={() => setWarning(null)} style={{ background: "none", border: "none", cursor: "pointer", color: subText, fontSize: 16 }}>✕</button>
               </div>
             </div>
           )}
 
-          {/* CÜMLE TAMAMLA */}
           {text.trim().length > 3 && (
             <div style={{ background: darkMode ? "#0d2137" : "#F8F8F8", padding: "6px 16px", borderTop: `1px solid ${borderColor}` }}>
               <div style={{ maxWidth: 760, margin: "0 auto" }}>
@@ -288,7 +331,6 @@ export default function App() {
             </div>
           )}
 
-          {/* SUGGESTION BAR */}
           {suggestions.length > 0 && (
             <div style={{ background: darkMode ? "#0f3460" : "#F0F0F0", borderTop: `1px solid ${borderColor}`, padding: "8px 16px" }}>
               <div style={{ maxWidth: 760, margin: "0 auto", display: "flex" }}>
@@ -303,7 +345,6 @@ export default function App() {
             </div>
           )}
 
-          {/* INPUT */}
           <div style={{ background: darkMode ? "#0f3460" : "#F0F0F0", padding: "8px 16px", borderTop: `1px solid ${borderColor}` }}>
             <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", gap: 8, alignItems: "center" }}>
               <div style={{ flex: 1, background: inputBg, borderRadius: 24, padding: "8px 16px", display: "flex", alignItems: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
@@ -312,7 +353,7 @@ export default function App() {
                   value={text}
                   onChange={e => setText(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && sendMessage()}
-                  placeholder={`${ctx.emoji} ${ctx.label} bağlamında yaz...`}
+                  placeholder={`${ctx.emoji} ${selectedContact ? selectedContact.name + "'e" : ctx.label + " bağlamında"} yaz...`}
                   style={{ flex: 1, border: "none", outline: "none", fontSize: 15, color: textColor, background: "transparent" }}
                 />
                 {warningLoading && <span style={{ fontSize: 12, color: subText }}>🔍</span>}
@@ -324,6 +365,97 @@ export default function App() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── CONTACTS PAGE ── */}
+      {page === "contacts" && (
+        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+          <div style={{ maxWidth: 760, margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, color: textColor, fontSize: 18 }}>👤 Kişiler</h2>
+                <p style={{ margin: "4px 0 0", color: subText, fontSize: 12 }}>Kişi seçince sistem o bağlamda öneri verir</p>
+              </div>
+              <button onClick={() => setShowAddContact(!showAddContact)} style={{
+                padding: "8px 16px", borderRadius: 20, border: "none",
+                background: ctx.color, color: "white", cursor: "pointer", fontWeight: "bold", fontSize: 13,
+              }}>+ Kişi Ekle</button>
+            </div>
+
+            {showAddContact && (
+              <div style={{ background: surface, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.1)", border: `2px solid ${ctx.color}` }}>
+                <h3 style={{ margin: "0 0 16px", color: textColor, fontSize: 15 }}>Yeni Kişi</h3>
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  <input
+                    value={newContactName}
+                    onChange={e => setNewContactName(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addContact()}
+                    placeholder="Kişi adı (örn. Hocam, Annem, Müdürüm)"
+                    style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: `1px solid ${borderColor}`, fontSize: 14, outline: "none", background: inputBg, color: textColor }}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <p style={{ margin: "0 0 8px", fontSize: 13, color: subText }}>Bağlam seç:</p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {Object.entries(CONTEXTS).map(([key, val]) => (
+                      <button key={key} onClick={() => setNewContactContext(key)} style={{
+                        padding: "6px 14px", borderRadius: 16,
+                        border: `2px solid ${newContactContext === key ? val.color : borderColor}`,
+                        background: newContactContext === key ? val.light : surface,
+                        color: newContactContext === key ? val.dark : subText,
+                        cursor: "pointer", fontSize: 13, fontWeight: newContactContext === key ? "bold" : "normal",
+                      }}>
+                        {val.emoji} {val.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={addContact} style={{
+                    padding: "8px 20px", background: ctx.color, color: "white",
+                    border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold",
+                  }}>Kaydet</button>
+                  <button onClick={() => setShowAddContact(false)} style={{
+                    padding: "8px 20px", background: "transparent", color: subText,
+                    border: `1px solid ${borderColor}`, borderRadius: 8, cursor: "pointer",
+                  }}>İptal</button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {contacts.map(contact => (
+                <div key={contact.id} style={{
+                  background: surface, borderRadius: 12, padding: 16,
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+                  border: `2px solid ${selectedContact?.id === contact.id ? CONTEXTS[contact.context].color : "transparent"}`,
+                  cursor: "pointer", position: "relative",
+                }} onClick={() => selectContact(contact)}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>{contact.emoji}</div>
+                  <div style={{ fontWeight: "bold", color: textColor, fontSize: 15, marginBottom: 4 }}>{contact.name}</div>
+                  <div style={{
+                    display: "inline-block", padding: "2px 10px", borderRadius: 10,
+                    background: CONTEXTS[contact.context].light,
+                    color: CONTEXTS[contact.context].dark, fontSize: 12, fontWeight: "bold",
+                  }}>
+                    {CONTEXTS[contact.context].label}
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); deleteContact(contact.id); }} style={{
+                    position: "absolute", top: 10, right: 10,
+                    background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: 16,
+                  }}>✕</button>
+                </div>
+              ))}
+            </div>
+
+            {contacts.length === 0 && (
+              <div style={{ textAlign: "center", padding: 40, color: subText }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
+                <p>Henüz kişi eklemediniz.</p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── COMPARE PAGE ── */}
