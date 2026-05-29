@@ -51,6 +51,7 @@ export default function App() {
   const [warning, setWarning] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [warningLoading, setWarningLoading] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const inputRef = useRef(null);
   const chatRef = useRef(null);
   const ctx = CONTEXTS[context];
@@ -72,32 +73,31 @@ export default function App() {
     chatRef.current?.scrollTo(0, chatRef.current.scrollHeight);
   }, [messages]);
 
-  // AI warning check — debounced
   useEffect(() => {
-    if (!text.trim() || text.length < 5) { setWarning(null); return; }
-    const t = setTimeout(checkWarning, 800);
-    return () => clearTimeout(t);
+    setWarning(null);
   }, [text, context]);
 
   async function fetchSuggestions() {
     try {
+      const history = messages.slice(-5).map(m => m.text);
       const res = await fetch(`${API}/predict`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, context, n_suggestions: 3 }),
+        body: JSON.stringify({ text, context, n_suggestions: 3, history }),
       });
       const data = await res.json();
       setSuggestions(data.suggestions || []);
     } catch { setSuggestions([]); }
   }
 
-  async function checkWarning() {
+  async function checkWarning(currentText) {
+    if (!currentText || currentText.length < 10) return;
     setWarningLoading(true);
     try {
       const res = await fetch(`${API}/check-warning`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, context }),
+        body: JSON.stringify({ text: currentText, context }),
       });
       const data = await res.json();
       setWarning(data.warning ? data : null);
@@ -114,6 +114,21 @@ export default function App() {
     } catch { setCompareResult(null); }
   }
 
+  async function completeSentence() {
+    if (!text.trim()) return;
+    setCompleting(true);
+    try {
+      const res = await fetch(`${API}/suggest-sentence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, context }),
+      });
+      const data = await res.json();
+      if (data.suggestion) setText(data.suggestion);
+    } catch { }
+    setCompleting(false);
+  }
+
   function acceptSuggestion(word) {
     const parts = text.split(" ");
     parts[parts.length - 1] = word;
@@ -122,15 +137,18 @@ export default function App() {
     inputRef.current?.focus();
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     if (!text.trim()) return;
+    const msgText = text;
     setMessages(prev => [...prev, {
-      text, context,
+      text: msgText, context,
       time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
     }]);
     setText("");
     setSuggestions([]);
     setWarning(null);
+    // Mesaj gönderince uyarı kontrol et
+    await checkWarning(msgText);
   }
 
   const navItems = [
@@ -255,6 +273,21 @@ export default function App() {
             </div>
           )}
 
+          {/* CÜMLE TAMAMLA */}
+          {text.trim().length > 3 && (
+            <div style={{ background: darkMode ? "#0d2137" : "#F8F8F8", padding: "6px 16px", borderTop: `1px solid ${borderColor}` }}>
+              <div style={{ maxWidth: 760, margin: "0 auto" }}>
+                <button onClick={completeSentence} disabled={completing} style={{
+                  padding: "5px 14px", borderRadius: 16, border: `1px solid ${ctx.color}`,
+                  background: "transparent", color: ctx.color, cursor: "pointer", fontSize: 12, fontWeight: "bold",
+                  opacity: completing ? 0.6 : 1
+                }}>
+                  {completing ? "⏳ Tamamlanıyor..." : "✨ Cümleyi Tamamla"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* SUGGESTION BAR */}
           {suggestions.length > 0 && (
             <div style={{ background: darkMode ? "#0f3460" : "#F0F0F0", borderTop: `1px solid ${borderColor}`, padding: "8px 16px" }}>
@@ -341,7 +374,7 @@ export default function App() {
                 ))}
                 <div style={{ marginTop: 16, padding: "12px 16px", background: darkMode ? "rgba(63,81,181,0.2)" : "#E8EAF6", borderRadius: 8, borderLeft: "4px solid #3F51B5" }}>
                   <p style={{ margin: 0, fontSize: 13, color: "#3F51B5" }}>
-                    <strong>Araştırma bağlantısı:</strong> WP sistemi bu farklılaşmayı yapamıyor. Bu prototip bağlama duyarlı alternatifdır.
+                    <strong>Araştırma bağlantısı:</strong> WP sistemi bu farklılaşmayı yapamıyor. Bu prototip bağlama duyarlı alternatiftir.
                   </p>
                 </div>
               </div>
@@ -354,8 +387,6 @@ export default function App() {
       {page === "research" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
           <div style={{ maxWidth: 760, margin: "0 auto" }}>
-
-            {/* Title */}
             <div style={{ background: surface, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
               <h2 style={{ margin: "0 0 8px", color: textColor, fontSize: 18 }}>📊 Araştırma Bulguları</h2>
               <p style={{ margin: 0, color: subText, fontSize: 13 }}>
@@ -363,7 +394,6 @@ export default function App() {
               </p>
             </div>
 
-            {/* Key Findings */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
               {RESEARCH_DATA.keyFindings.map((f, i) => (
                 <div key={i} style={{ background: surface, borderRadius: 12, padding: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
@@ -374,13 +404,12 @@ export default function App() {
               ))}
             </div>
 
-            {/* Chi-Square Table */}
             <div style={{ background: surface, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
               <h3 style={{ margin: "0 0 16px", color: textColor, fontSize: 16 }}>Chi-Square Test Sonuçları</h3>
               <p style={{ margin: "0 0 12px", color: subText, fontSize: 12 }}>Telefon markası farkı istatistiksel olarak anlamlı mı?</p>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ background: darkMode ? "#1F4E79" : "#1F4E79" }}>
+                  <tr style={{ background: "#1F4E79" }}>
                     {["Test Cümlesi", "Chi²", "p değeri", "Sonuç"].map(h => (
                       <th key={h} style={{ padding: "8px 12px", color: "white", fontSize: 12, textAlign: "left", fontWeight: "bold" }}>{h}</th>
                     ))}
@@ -403,7 +432,6 @@ export default function App() {
               </table>
             </div>
 
-            {/* Entropy Chart */}
             <div style={{ background: surface, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
               <h3 style={{ margin: "0 0 8px", color: textColor, fontSize: 16 }}>Marka Bazında Entropy</h3>
               <p style={{ margin: "0 0 16px", color: subText, fontSize: 12 }}>Düşük entropy = daha homojen öneriler (iOS en standart)</p>
@@ -417,12 +445,8 @@ export default function App() {
                   ].map((m, mi) => (
                     <div key={mi} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       <span style={{ width: 60, fontSize: 11, color: subText }}>{m.label}</span>
-                      <div style={{ flex: 1, background: darkMode ? "#333" : "#eee", borderRadius: 4, height: 16, position: "relative" }}>
-                        <div style={{
-                          width: `${(m.val / 5) * 100}%`,
-                          background: m.color, borderRadius: 4, height: "100%",
-                          transition: "width 0.5s"
-                        }} />
+                      <div style={{ flex: 1, background: darkMode ? "#333" : "#eee", borderRadius: 4, height: 16 }}>
+                        <div style={{ width: `${(m.val / 5) * 100}%`, background: m.color, borderRadius: 4, height: "100%", transition: "width 0.5s" }} />
                       </div>
                       <span style={{ width: 32, fontSize: 11, color: textColor, fontWeight: "bold" }}>{m.val}</span>
                     </div>
@@ -431,7 +455,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* Conclusion */}
             <div style={{ background: darkMode ? "rgba(63,81,181,0.2)" : "#E8EAF6", borderRadius: 12, padding: 20, borderLeft: "4px solid #3F51B5" }}>
               <h3 style={{ margin: "0 0 8px", color: "#3F51B5", fontSize: 15 }}>🎯 Ana Sonuç</h3>
               <p style={{ margin: 0, fontSize: 13, color: darkMode ? "#aaa" : "#333", lineHeight: 1.6 }}>

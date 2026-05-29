@@ -179,6 +179,7 @@ class PredictRequest(BaseModel):
     text: str
     context: str
     n_suggestions: int = 3
+    history: list = []  
 
 class WarningRequest(BaseModel):
     text: str
@@ -193,23 +194,41 @@ def list_contexts():
     return {"contexts": {ctx: len(sentences) for ctx, sentences in CONTEXT_DATA.items()}}
 
 @app.post("/predict")
-def predict(req: PredictRequest):
-    if req.context not in MODELS:
-        return {"suggestions": [], "error": f"Unknown context: {req.context}"}
-    model = MODELS[req.context]
-    words = clean_text(req.text).split()
-    if not words:
-        return {"suggestions": []}
-    candidates = Counter()
-    if len(words) >= 2:
-        key = (words[-2], words[-1])
+async def predict(req: PredictRequest):
+    try:
+        context_label = CONTEXT_LABELS.get(req.context, req.context)
+        
+        # Sohbet geçmişini hazırla
+        gecmis = ""
+        if req.history:
+            gecmis = "Onceki mesajlar:\n" + "\n".join(req.history[-5:]) + "\n\n"
+        
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            max_tokens=30,
+            messages=[{
+                "role": "user",
+'content': f'{gecmis}{context_label} baglaminda "{req.text}" kelimesinden sonra gelebilecek en uygun 3 Türkçe kelimeyi ver. SADECE 3 kelime virgülle ayir, baska hicbir sey yazma. Format: kelime1,kelime2,kelime3'            }]
+        )
+        text = response.choices[0].message.content.strip()
+        suggestions = [s.strip() for s in text.split(',')][:3]
+        return {"suggestions": suggestions, "context": req.context, "source": "groq"}
+    except Exception as e:
+        print(f"Predict error: {e}")
+        # Fallback: N-gram
+        model = MODELS.get(req.context, {})
+        words = clean_text(req.text).split()
+        if not words:
+            return {"suggestions": []}
+        candidates = Counter()
+        if len(words) >= 2:
+            key = (words[-2], words[-1])
+            if key in model:
+                candidates.update(model[key])
+        key = words[-1]
         if key in model:
             candidates.update(model[key])
-    key = words[-1]
-    if key in model:
-        candidates.update(model[key])
-    suggestions = [w for w, _ in candidates.most_common(req.n_suggestions)]
-    return {"suggestions": suggestions, "context": req.context, "text": req.text}
+        return {"suggestions": [w for w, _ in candidates.most_common(3)], "source": "ngram"}
 
 @app.get("/compare")
 def compare(text: str):
@@ -258,3 +277,24 @@ async def check_warning(req: WarningRequest):
     except Exception as e:
         print(f"Groq error: {e}")
         return {"warning": False, "message": None, "suggestion": None}
+
+class SentenceRequest(BaseModel):
+    text: str
+    context: str
+
+@app.post("/suggest-sentence")
+async def suggest_sentence(req: SentenceRequest):
+    context_label = CONTEXT_LABELS.get(req.context, req.context)
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            max_tokens=150,
+            messages=[{
+                "role": "user",
+                "content": f'Sen bir Türkçe yazışma asistanısın. Kullanıcı "{context_label}" baglaminda su mesaji yaziyor: "{req.text}"\n\nBu mesaji tamamla veya daha iyi bir versiyonunu yaz. SADECE tamamlanmis mesaji ver, baska hicbir sey yazma. Bağlama uygun ol.'
+            }]
+        )
+        return {"suggestion": response.choices[0].message.content.strip()}
+    except Exception as e:
+        print(f"Sentence suggestion error: {e}")
+        return {"suggestion": None}
