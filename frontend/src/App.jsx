@@ -64,6 +64,21 @@ export default function App() {
       return saved ? JSON.parse(saved) : DEFAULT_CONTACTS;
     } catch { return DEFAULT_CONTACTS; }
   });
+  const [templates, setTemplates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('templates');
+      return saved ? JSON.parse(saved) : [
+        { id: 1, title: "Randevu İsteği", text: "Hocam müsait olduğunuzda görüşebilir miyiz?", context: "hoca" },
+        { id: 2, title: "Haftalık Duyuru", text: "Merhaba, bu haftaki toplantı saat 14:00'de.", context: "is" },
+        { id: 3, title: "Buluşma Teklifi", text: "Kanka akşam çıkalım mı bir yerlere?", context: "arkadas" },
+      ];
+    } catch { return []; }
+  });
+  const [showAddTemplate, setShowAddTemplate] = useState(false);
+  const [newTemplateTitle, setNewTemplateTitle] = useState("");
+  const [newTemplateText, setNewTemplateText] = useState("");
+  const [newTemplateContext, setNewTemplateContext] = useState("gundelik");
+  const [copied, setCopied] = useState(null);
   const [selectedContact, setSelectedContact] = useState(null);
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContactName, setNewContactName] = useState("");
@@ -195,9 +210,45 @@ export default function App() {
     setText("");
   }
 
+  function addTemplate() {
+    if (!newTemplateTitle.trim() || !newTemplateText.trim()) return;
+    const template = {
+      id: Date.now(),
+      title: newTemplateTitle,
+      text: newTemplateText,
+      context: newTemplateContext,
+    };
+    const updated = [...templates, template];
+    setTemplates(updated);
+    try { localStorage.setItem('templates', JSON.stringify(updated)); } catch {}
+    setNewTemplateTitle("");
+    setNewTemplateText("");
+    setShowAddTemplate(false);
+  }
+  
+  function deleteTemplate(id) {
+    const updated = templates.filter(t => t.id !== id);
+    setTemplates(updated);
+    try { localStorage.setItem('templates', JSON.stringify(updated)); } catch {}
+  }
+  
+  function copyTemplate(template) {
+    navigator.clipboard.writeText(template.text);
+    setCopied(template.id);
+    setTimeout(() => setCopied(null), 2000);
+  }
+  
+  function useTemplate(template) {
+    setContext(template.context);
+    setText(template.text);
+    setPage("chat");
+    inputRef.current?.focus();
+  }
+
   const navItems = [
     { id: "chat", label: "💬 Chat" },
     { id: "contacts", label: "👤 Kişiler" },
+    { id: "templates", label: "📝 Şablonlar" },
     { id: "compare", label: "🔍 Karşılaştır" },
     { id: "research", label: "📊 Araştırma" },
   ];
@@ -458,6 +509,114 @@ export default function App() {
         </div>
       )}
 
+      {/* ── TEMPLATES PAGE ── */}
+{page === "templates" && (
+  <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+    <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, color: textColor, fontSize: 18 }}>📝 Şablon Mesajlar</h2>
+          <p style={{ margin: "4px 0 0", color: subText, fontSize: 12 }}>Sık kullandığın mesajları kaydet, tek tıkla kullan</p>
+        </div>
+        <button onClick={() => setShowAddTemplate(!showAddTemplate)} style={{
+          padding: "8px 16px", borderRadius: 20, border: "none",
+          background: ctx.color, color: "white", cursor: "pointer", fontWeight: "bold", fontSize: 13,
+        }}>+ Şablon Ekle</button>
+      </div>
+
+      {showAddTemplate && (
+        <div style={{ background: surface, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.1)", border: `2px solid ${ctx.color}` }}>
+          <h3 style={{ margin: "0 0 16px", color: textColor, fontSize: 15 }}>Yeni Şablon</h3>
+          <input
+            value={newTemplateTitle}
+            onChange={e => setNewTemplateTitle(e.target.value)}
+            placeholder="Başlık (örn. Randevu İsteği)"
+            style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${borderColor}`, fontSize: 14, outline: "none", background: inputBg, color: textColor, marginBottom: 10, boxSizing: "border-box" }}
+          />
+          <textarea
+            value={newTemplateText}
+            onChange={e => setNewTemplateText(e.target.value)}
+            placeholder="Mesaj içeriği..."
+            rows={3}
+            style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: `1px solid ${borderColor}`, fontSize: 14, outline: "none", background: inputBg, color: textColor, marginBottom: 10, boxSizing: "border-box", resize: "vertical" }}
+          />
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 13, color: subText }}>Bağlam:</p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {Object.entries(CONTEXTS).map(([key, val]) => (
+                <button key={key} onClick={() => setNewTemplateContext(key)} style={{
+                  padding: "5px 12px", borderRadius: 14,
+                  border: `2px solid ${newTemplateContext === key ? val.color : borderColor}`,
+                  background: newTemplateContext === key ? val.light : surface,
+                  color: newTemplateContext === key ? val.dark : subText,
+                  cursor: "pointer", fontSize: 12, fontWeight: newTemplateContext === key ? "bold" : "normal",
+                }}>
+                  {val.emoji} {val.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={addTemplate} style={{
+              padding: "8px 20px", background: ctx.color, color: "white",
+              border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold",
+            }}>Kaydet</button>
+            <button onClick={() => setShowAddTemplate(false)} style={{
+              padding: "8px 20px", background: "transparent", color: subText,
+              border: `1px solid ${borderColor}`, borderRadius: 8, cursor: "pointer",
+            }}>İptal</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {templates.map(template => (
+          <div key={template.id} style={{
+            background: surface, borderRadius: 12, padding: 16,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+            borderLeft: `4px solid ${CONTEXTS[template.context].color}`,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+              <div>
+                <span style={{ fontWeight: "bold", color: textColor, fontSize: 14 }}>{template.title}</span>
+                <span style={{ marginLeft: 8, padding: "2px 8px", borderRadius: 10, background: CONTEXTS[template.context].light, color: CONTEXTS[template.context].dark, fontSize: 11, fontWeight: "bold" }}>
+                  {CONTEXTS[template.context].emoji} {CONTEXTS[template.context].label}
+                </span>
+              </div>
+              <button onClick={() => deleteTemplate(template.id)} style={{
+                background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: 16,
+              }}>✕</button>
+            </div>
+            <p style={{ margin: "0 0 12px", color: subText, fontSize: 13, lineHeight: 1.5 }}>{template.text}</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => copyTemplate(template)} style={{
+                padding: "6px 14px", borderRadius: 14, border: `1px solid ${CONTEXTS[template.context].color}`,
+                background: "transparent", color: CONTEXTS[template.context].color,
+                cursor: "pointer", fontSize: 12, fontWeight: "bold",
+              }}>
+                {copied === template.id ? "✅ Kopyalandı!" : "📋 Kopyala"}
+              </button>
+              <button onClick={() => useTemplate(template)} style={{
+                padding: "6px 14px", borderRadius: 14, border: "none",
+                background: CONTEXTS[template.context].color, color: "white",
+                cursor: "pointer", fontSize: 12, fontWeight: "bold",
+              }}>
+                ✍️ Chat'e Aktar
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {templates.length === 0 && (
+          <div style={{ textAlign: "center", padding: 40, color: subText }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📝</div>
+            <p>Henüz şablon eklemediniz.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
       {/* ── COMPARE PAGE ── */}
       {page === "compare" && (
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
