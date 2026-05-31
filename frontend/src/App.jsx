@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 
 const CONTEXTS = {
-  arkadas: { label: "Arkadaş", emoji: "👫", color: "#25D366", light: "#E8F5E9", dark: "#1a8f45" },
-  hoca: { label: "Hoca", emoji: "👨‍🏫", color: "#2196F3", light: "#E3F2FD", dark: "#1565C0" },
-  is: { label: "İş", emoji: "💼", color: "#9C27B0", light: "#F3E5F5", dark: "#6A1B9A" },
-  spor: { label: "Spor", emoji: "⚽", color: "#FF5722", light: "#FBE9E7", dark: "#BF360C" },
-  gundelik: { label: "Gündelik", emoji: "☀️", color: "#FF9800", light: "#FFF3E0", dark: "#E65100" },
+  arkadas: { label: "Arkadaş", emoji: "👫", color: "#10b981", light: "#ECFDF5", dark: "#059669" },
+  hoca: { label: "Hoca", emoji: "👨‍🏫", color: "#6366f1", light: "#EEF2FF", dark: "#4338ca" },
+  is: { label: "İş", emoji: "💼", color: "#8b5cf6", light: "#F5F3FF", dark: "#6d28d9" },
+  spor: { label: "Spor", emoji: "⚽", color: "#f59e0b", light: "#FFFBEB", dark: "#d97706" },
+  gundelik: { label: "Gündelik", emoji: "☀️", color: "#f97316", light: "#FFF7ED", dark: "#ea580c" },
 };
 
 const RESEARCH_DATA = {
@@ -94,8 +94,8 @@ export default function App() {
   const chatRef = useRef(null);
   const ctx = CONTEXTS[context];
 
-  const bg = darkMode ? "#1a1a2e" : "#ECE5DD";
-  const surface = darkMode ? "#16213e" : "white";
+  const bg = darkMode ? "#0f0f0f" : "#f4f4f5";
+  const surface = darkMode ? "#1c1c1e" : "#ffffff";
   const textColor = darkMode ? "#e0e0e0" : "#1a1a1a";
   const subText = darkMode ? "#888" : "#666";
   const borderColor = darkMode ? "#333" : "#E0E0E0";
@@ -127,10 +127,16 @@ export default function App() {
   async function fetchSuggestions() {
     try {
       const history = messages.slice(-5).map(m => m.text);
+      // Kişisel öğrenme verisi
+      let personal_data = [];
+      try {
+        const stored = localStorage.getItem(`personal_ngram_${context}`);
+        if (stored) personal_data = JSON.parse(stored).slice(-100);
+      } catch {}
       const res = await fetch(`${API}/predict`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, context, n_suggestions: 3, history }),
+        body: JSON.stringify({ text, context, n_suggestions: 3, history, personal_data }),
       });
       const data = await res.json();
       setSuggestions(data.suggestions || []);
@@ -187,10 +193,21 @@ export default function App() {
 
   function acceptSuggestion(word) {
     const parts = text.split(" ");
+    const prevWord = parts[parts.length - 1];
     parts[parts.length - 1] = word;
     setText(parts.join(" ") + " ");
     setWarning(null);
     inputRef.current?.focus();
+
+    // Longitudinal learning: kabul edilen öneriyi kaydet
+    try {
+      const key = `personal_ngram_${context}`;
+      const existing = JSON.parse(localStorage.getItem(key) || "[]");
+      existing.push({ prev: prevWord.toLowerCase(), word: word.toLowerCase(), ts: Date.now() });
+      // Son 500 kaydı tut
+      if (existing.length > 500) existing.splice(0, existing.length - 500);
+      localStorage.setItem(key, JSON.stringify(existing));
+    } catch {}
   }
 
   async function sendMessage() {
@@ -302,8 +319,8 @@ export default function App() {
           <div style={{ background: "white", borderRadius: 20, padding: 32, maxWidth: 480, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>💬</div>
-              <h2 style={{ margin: "0 0 8px", color: "#1a1a1a", fontSize: 22 }}>Bağlam Duyarlı Öneri Sistemi</h2>
-              <p style={{ margin: 0, color: "#666", fontSize: 14 }}>WhatsApp araştırmasından doğan prototip — alıcıya göre öneri</p>
+              <h2 style={{ margin: "0 0 8px", color: "#1a1a1a", fontSize: 22 }}>ChatSense</h2>
+              <p style={{ margin: 0, color: "#666", fontSize: 14 }}>Kime yazdığına göre öneri sunan akıllı sistem</p>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
               {[
@@ -321,15 +338,15 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div style={{ background: "#E8F5E9", borderRadius: 10, padding: "10px 14px", marginBottom: 20, borderLeft: "4px solid #25D366" }}>
-              <p style={{ margin: 0, fontSize: 12, color: "#2e7d32" }}>
+            <div style={{ background: "#f4f4f5", borderRadius: 10, padding: "10px 14px", marginBottom: 20, borderLeft: "4px solid #6366f1" }}>
+              <p style={{ margin: 0, fontSize: 12, color: "#18181b" }}>
                 <strong>Araştırma:</strong> 94 WhatsApp kullanıcısından toplanan veri ile telefon markasının öneri içeriğini belirlediği kanıtlandı. Bu sistem bağlamı belirleyici yapıyor.
               </p>
             </div>
             <button onClick={() => {
               setShowOnboarding(false);
               try { localStorage.setItem("onboarding_done", "1"); } catch {}
-            }} style={{ width: "100%", padding: "14px", background: "#25D366", color: "white", border: "none", borderRadius: 12, fontSize: 16, fontWeight: "bold", cursor: "pointer" }}>
+            }} style={{ width: "100%", padding: "14px", background: "#18181b", color: "white", border: "none", borderRadius: 12, fontSize: 16, fontWeight: "bold", cursor: "pointer" }}>
               Başlayalım 🚀
             </button>
           </div>
@@ -337,7 +354,7 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <div style={{ background: ctx.color, color: "white", padding: "0 16px", boxShadow: "0 2px 8px rgba(0,0,0,0.2)", zIndex: 10 }}>
+      <div style={{ background: "#18181b", color: "white", padding: "0 16px", boxShadow: "0 1px 0 rgba(0,0,0,0.1)", zIndex: 10 }}>
         <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
@@ -345,10 +362,10 @@ export default function App() {
             </div>
             <div>
               <div style={{ fontWeight: "bold", fontSize: 15 }}>
-                {selectedContact ? selectedContact.name : "Bağlam Duyarlı Öneri Sistemi"}
+                {selectedContact ? selectedContact.name : "ChatSense"}
               </div>
               <div style={{ fontSize: 11, opacity: 0.85 }}>
-                {selectedContact ? `${ctx.label} bağlamı` : "Bitirme Projesi — WP Araştırması"}
+                {selectedContact ? `${ctx.label} bağlamı` : "Bağlam Duyarlı Türkçe Öneri"}
               </div>
             </div>
           </div>
@@ -779,7 +796,7 @@ export default function App() {
 
             {compareTab === "whatsapp" && (
               <div>
-                <div style={{ background: surface, borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", borderLeft: "4px solid #25D366" }}>
+                <div style={{ background: surface, borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", borderLeft: "4px solid #6366f1" }}>
                   <p style={{ margin: 0, fontSize: 13, color: subText }}>
                     <strong style={{ color: textColor }}>Araştırma bulgusu:</strong> 94 katılımcıdan toplanan WhatsApp öneri verileri ile sistemimizin bağlam duyarlı önerileri karşılaştırılmaktadır. WhatsApp cihaz markasına göre standart öneri sunarken, sistemimiz alıcıya göre farklılaştırır.
                   </p>
@@ -875,7 +892,7 @@ export default function App() {
                       <td style={{ padding: "8px 12px", color: textColor, fontSize: 13, fontWeight: "bold" }}>{row.chi2}</td>
                       <td style={{ padding: "8px 12px", color: "#4CAF50", fontSize: 13, fontWeight: "bold" }}>{row.p}</td>
                       <td style={{ padding: "8px 12px", fontSize: 13 }}>
-                        <span style={{ background: "#E8F5E9", color: "#2E7D32", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: "bold" }}>✅ {row.result}</span>
+                        <span style={{ background: "#f4f4f5", color: "#2E7D32", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: "bold" }}>✅ {row.result}</span>
                       </td>
                     </tr>
                   ))}

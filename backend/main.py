@@ -203,7 +203,8 @@ class PredictRequest(BaseModel):
     text: str
     context: str
     n_suggestions: int = 3
-    history: list = []  
+    history: list = []
+    personal_data: list = []  # [{prev, word}] — kullanıcı kabul geçmişi
 
 class WarningRequest(BaseModel):
     text: str
@@ -276,7 +277,13 @@ async def predict(req: PredictRequest, request: Request):
                 candidates.update(model[key])
         if words[-1] in model:
             candidates.update(model[words[-1]])
-        return {"suggestions": [w for w, _ in candidates.most_common(3)], "source": "ngram"}
+        # Kişisel öğrenme verisini ekle (3x ağırlık)
+        if req.personal_data:
+            last_word = words[-1]
+            for item in req.personal_data:
+                if isinstance(item, dict) and item.get("prev") == last_word:
+                    candidates[item.get("word", "")] += 3
+        return {"suggestions": [w for w, _ in candidates.most_common(3)], "source": "ngram_personal"}
 
 @app.get("/compare")
 def compare(text: str):
