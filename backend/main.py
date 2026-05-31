@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from collections import defaultdict, Counter
+from time import time
 import re
 import json
 import os
@@ -13,6 +14,29 @@ load_dotenv()
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 app = FastAPI(title="Context-Aware Turkish Word Prediction API")
+
+# ── Rate Limiting ──
+RATE_LIMIT = 30  # max istek/dakika per IP
+rate_store: dict = {}
+
+def check_rate_limit(ip: str):
+    now = time()
+    if ip not in rate_store:
+        rate_store[ip] = []
+    # Son 60 saniyedeki istekleri tut
+    rate_store[ip] = [t for t in rate_store[ip] if now - t < 60]
+    if len(rate_store[ip]) >= RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Çok fazla istek. Lütfen bekleyin.")
+    rate_store[ip].append(now)
+
+# ── Input Sanitizer ──
+def sanitize(text: str, max_len: int = 500) -> str:
+    if not text:
+        return ""
+    # HTML/script injection temizle
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[;`]", "", text)
+    return text[:max_len].strip()
 
 app.add_middleware(
     CORSMiddleware,
@@ -185,6 +209,10 @@ class WarningRequest(BaseModel):
     text: str
     context: str
 
+class SentenceRequest(BaseModel):
+    text: str
+    context: str
+
 @app.get("/")
 def root():
     return {"message": "Context-Aware Turkish Word Prediction API is running"}
@@ -194,40 +222,60 @@ def list_contexts():
     return {"contexts": {ctx: len(sentences) for ctx, sentences in CONTEXT_DATA.items()}}
 
 @app.post("/predict")
-async def predict(req: PredictRequest):
+async def predict(req: PredictRequest, request: Request):
+    check_rate_limit(request.client.host)
+    req.text = sanitize(req.text)
+    if not req.text:
+        return {"suggestions": [], "source": "empty"}
     try:
         context_label = CONTEXT_LABELS.get(req.context, req.context)
-        
-        # Sohbet geçmişini hazırla
         gecmis = ""
         if req.history:
-            gecmis = "Onceki mesajlar:\n" + "\n".join(req.history[-5:]) + "\n\n"
-        
+            gecmis = "Önceki mesajlar:\n" + "\n".join(req.history[-5:]) + "\n\n"
         response = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            max_tokens=30,
-            messages=[{
-                "role": "user",
-'content': f'{gecmis}{context_label} baglaminda "{req.text}" kelimesinden sonra gelebilecek en uygun 3 Türkçe kelimeyi ver. SADECE 3 kelime virgülle ayir, baska hicbir sey yazma. Format: kelime1,kelime2,kelime3'            }]
+            max_tokens=20,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Sen bir Türkçe klavye öneri sistemisin. SADECE virgülle ayrılmış 3 kelime üret. Başka hiçbir şey yazma. Format: kelime1,kelime2,kelime3"
+                },
+                {
+                    "role": "user",
+                    "content": f'{gecmis}{context_label} bağlamında "{req.text}" ifadesinden sonra gelebilecek 3 Türkçe kelime.'
+                }
+            ]
         )
-        text = response.choices[0].message.content.strip()
-        suggestions = [s.strip() for s in text.split(',')][:3]
+        raw = response.choices[0].message.content.strip()
+        # Açıklama varsa sadece virgüllü kısmı al
+        for line in raw.split("\n"):
+            if "," in line:
+                raw = line
+                break
+        parts = raw.split(",")
+        suggestions = []
+        for p in parts:
+            clean = re.sub(r"^[\d\.\-\)\s]+", "", p.strip())
+            clean = re.sub(r"[^\w]", "", clean)
+            if clean and len(clean) > 1:
+                suggestions.append(clean.lower())
+        suggestions = suggestions[:3]
+        if len(suggestions) < 2:
+            raise ValueError("Yetersiz öneri")
         return {"suggestions": suggestions, "context": req.context, "source": "groq"}
     except Exception as e:
-        print(f"Predict error: {e}")
-        # Fallback: N-gram
+        print(f"Groq fallback: {e}")
         model = MODELS.get(req.context, {})
         words = clean_text(req.text).split()
         if not words:
-            return {"suggestions": []}
+            return {"suggestions": [], "source": "ngram"}
         candidates = Counter()
         if len(words) >= 2:
             key = (words[-2], words[-1])
             if key in model:
                 candidates.update(model[key])
-        key = words[-1]
-        if key in model:
-            candidates.update(model[key])
+        if words[-1] in model:
+            candidates.update(model[words[-1]])
         return {"suggestions": [w for w, _ in candidates.most_common(3)], "source": "ngram"}
 
 @app.get("/compare")
@@ -251,39 +299,43 @@ def compare(text: str):
     return {"text": text, "context_predictions": results}
 
 @app.post("/check-warning")
-async def check_warning(req: WarningRequest):
+async def check_warning(req: WarningRequest, request: Request):
+    check_rate_limit(request.client.host)
+    req.text = sanitize(req.text)
     if not req.text.strip():
         return {"warning": False, "message": None, "suggestion": None}
-
     context_label = CONTEXT_LABELS.get(req.context, req.context)
-
     try:
         response = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            max_tokens=200,
+            max_tokens=150,
             messages=[
                 {
+                    "role": "system",
+                    "content": "Sen bir Türkçe yazışma asistanısın. SADECE geçerli JSON döndür. Markdown, açıklama veya ```json bloğu kullanma."
+                },
+                {
                     "role": "user",
-                    "content": f'Sen bir Türkçe yazışma asistanısın. Kullanıcı "{context_label}" baglaminda bir mesaj yazıyor: "{req.text}"\n\nBu metni değerlendir:\n- Hoca veya İş bağlamında resmiyet beklenir. Argo, samimi, kısaltma veya gayri resmi ifadeler uyarı gerektirir.\n- Arkadaş bağlamında samimiyet beklenir. Çok resmi ifadeler bilgi olarak belirtilir.\n- Spor ve Gündelik bağlamında genellikle uyarı gerekmez.\n\nSADECE JSON dondur:\n{{"warning": true, "message": "kisa Türkçe uyarı", "suggestion": "Türkçe alternatif öneri"}} veya {{"warning": false, "message": null, "suggestion": null}}'                }
+                    "content": f'Kullanıcı "{context_label}" bağlamında şunu yazıyor: "{req.text}"\n\nDeğerlendir: Hoca/İş bağlamında resmiyet gerekir, argo/samimi ifadeler uyarı gerektirir. Arkadaş bağlamında aşırı resmiyet bilgi olarak belirtilir. Spor/Gündelik bağlamında uyarı gerekmez.\n\nJSON: {{"warning": true, "message": "kısa Türkçe uyarı", "suggestion": "alternatif öneri"}} veya {{"warning": false, "message": null, "suggestion": null}}'
+                }
             ]
         )
-        text = response.choices[0].message.content.strip()
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text.strip())
-        return result
+        raw = response.choices[0].message.content.strip()
+        raw = re.sub(r"```(?:json)?", "", raw).strip().rstrip("`").strip()
+        result = json.loads(raw)
+        return {
+            "warning": bool(result.get("warning", False)),
+            "message": result.get("message"),
+            "suggestion": result.get("suggestion")
+        }
     except Exception as e:
-        print(f"Groq error: {e}")
+        print(f"Warning check error: {e}")
         return {"warning": False, "message": None, "suggestion": None}
 
-class SentenceRequest(BaseModel):
-    text: str
-    context: str
-
 @app.post("/suggest-sentence")
-async def suggest_sentence(req: SentenceRequest):
+async def suggest_sentence(req: SentenceRequest, request: Request):
+    check_rate_limit(request.client.host)
+    req.text = sanitize(req.text)
     context_label = CONTEXT_LABELS.get(req.context, req.context)
     try:
         response = groq_client.chat.completions.create(
@@ -297,4 +349,4 @@ async def suggest_sentence(req: SentenceRequest):
         return {"suggestion": response.choices[0].message.content.strip()}
     except Exception as e:
         print(f"Sentence suggestion error: {e}")
-        return {"suggestion": None}
+        return {"suggestion": None}# Bu satırları main.py'ın en üstündeki import bloğuna taşı

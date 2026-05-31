@@ -182,3 +182,7 @@
     border-right-color: var(--border);
   }
 }
+
+* { -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
