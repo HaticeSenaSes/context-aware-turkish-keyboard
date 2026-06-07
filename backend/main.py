@@ -235,21 +235,19 @@ async def predict(req: PredictRequest, request: Request):
             gecmis = "Önceki mesajlar:\n" + "\n".join(req.history[-5:]) + "\n\n"
         response = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            max_tokens=20,
+            max_tokens=30,
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        f"Sen bir Türkçe klavye öneri sistemisin. "
-                        f"Aktif bağlam: {context_label}. "
-                        f"Bu bağlamda yazışma tarzı: arkadas=samimi/argo/kanka/nbr, hoca=saygılı/resmi/hocam/teşekkür, is=profesyonel/toplantı/rapor, spor=enerjik/antrenman/maç, gundelik=rahat/tamam/olur. "
-                        f"Metnin devamına gelebilecek 3 FARKLI Türkçe kelime öner. Bağlama uygun kelimeler seç. "
-                        f"SADECE format: kelime1,kelime2,kelime3"
+                        f"Türkçe klavye öneri sistemisin. "
+                        f"Bağlam: {context_label}. Tarz: arkadas=samimi/argo/kanka, hoca=saygılı/resmi/hocam, is=profesyonel/toplantı, spor=enerjik/maç/antrenman, gundelik=rahat/tamam. "                        f"Kural: YALNIZCA 3 adet tek Türkçe kelime yaz, virgülle ayır, başka HİÇBİR şey yazma. "
+                        f"Örnek çıktı: gidiyorum,tamam,olur"
                     )
                 },
                 {
                     "role": "user",
-                    "content": f"{req.text}"
+                    "content": f'"{req.text}" ifadesinin devamına gelebilecek 3 Türkçe kelime (bağlam: {context_label}):'
                 }
             ]
         )
