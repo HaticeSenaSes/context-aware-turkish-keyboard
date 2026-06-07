@@ -318,7 +318,7 @@ async def check_warning(req: WarningRequest, request: Request):
     context_label = CONTEXT_LABELS.get(req.context, req.context)
     try:
         response = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             max_tokens=150,
             messages=[
                 {
