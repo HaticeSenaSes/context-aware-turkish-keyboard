@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, StatusBar, KeyboardAvoidingView, Platform,
-  SafeAreaView, Alert
+  SafeAreaView, Alert, Image, Animated as RNAnimated,
+  LayoutAnimation, UIManager
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
-import { Image, Animated as RNAnimated } from "react-native";
 import * as Haptics from "expo-haptics";
 
 
@@ -27,6 +27,10 @@ const DEFAULT_CONTACTS = [
   { id: 2, name: "Kankam", context: "arkadas", emoji: "👫" },
   { id: 3, name: "Müdürüm", context: "is", emoji: "💼" },
 ];
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const Tab = createBottomTabNavigator();
 
@@ -334,10 +338,11 @@ function ResearchScreen() {
 }
 
 function CompareScreen() {
+  const [expanded, setExpanded] = useState(null);
   const data = [
     { sentence: "Bugün hava", iphone: ["nasil","çok","güzel"], samsung: ["çok","nasil","iyi"], xiaomi: ["nasil","durumu","iyi"], arkadas: ["çok","güzel","nasil"], hoca: ["iyi","bugün","hocam"], is: ["raporunu","toplanti","iyi"] },
-    { sentence: "Seni çok", iphone: ["seviyorum","özledim","seviyor"], samsung: ["seviyorum","özledim","seviyor"], xiaomi: ["seviyorum","özledim","seviyor"], arkadas: ["özledim","seviyorum","özledik"], hoca: ["tesekkür","saygilarimla","bilgi"], is: ["takdir","degerli","tesekkür"] },
-    { sentence: "Sinav icin", iphone: ["de","bir","da"], samsung: ["mi","çok","bir"], xiaomi: ["hemen","tikladiginizda","icin"], arkadas: ["calisalim","hazirlandin","korktum"], hoca: ["bilgi","tarih","kapsam"], is: ["rapor","hazirlik","sunum"] },
+    { sentence: "Seni çok", iphone: ["seviyorum","özledim","seviyor"], samsung: ["seviyorum","özledim","seviyor"], xiaomi: ["seviyorum","özledim","seviyor"], arkadas: ["özledim","seviyorum","özledik"], hoca: ["teşekkür","saygılarımla","bilgi"], is: ["takdir","değerli","teşekkür"] },
+    { sentence: "Sınav için", iphone: ["de","bir","da"], samsung: ["mi","çok","bir"], xiaomi: ["hemen","için","birkaç"], arkadas: ["çalışalım","hazırlandın","korktum"], hoca: ["bilgi","tarih","kapsam"], is: ["rapor","hazırlık","sunum"] },
   ];
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f4f4f5" }}>
@@ -347,29 +352,51 @@ function CompareScreen() {
       </View>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <View style={{ backgroundColor: "#f4f4f5", borderRadius: 10, padding: 12, marginBottom: 16, borderLeftWidth: 3, borderLeftColor: "#18181b" }}>
-          <Text style={{ fontSize: 13, color: "#555", lineHeight: 18 }}>WhatsApp cihaz bazli standart öneri sunarken, ChatSense alıcıya göre farklılaştırır.</Text>
+          <Text style={{ fontSize: 13, color: "#555", lineHeight: 18 }}>
+            WhatsApp cihaz bazlı standart öneri sunarken, ChatSense alıcıya göre farklılaştırır.
+          </Text>
         </View>
         {data.map((item, idx) => (
-          <View key={idx} style={{ backgroundColor: "white", borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <Text style={{ fontSize: 16, fontWeight: "bold", marginBottom: 12 }}>"{item.sentence}"</Text>
-            <Text style={{ fontSize: 10, fontWeight: "700", color: "#999", textTransform: "uppercase", letterSpacing: 1.5, letterSpacing: 1, marginBottom: 8 }}>📱 WhatsApp</Text>
-            {[["iPhone","#555",item.iphone],["Samsung","#333",item.samsung],["Xiaomi","#444",item.xiaomi]].map(([brand,color,words]) => (
-              <View key={brand} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 8 }}>
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#666", width: 80 }}>{brand}</Text>
-                <View style={{ flexDirection: "row", gap: 4 }}>
-                  {words.map((w,i) => <View key={i} style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: color }}><Text style={{ color: "white", fontSize: 11, fontWeight: "bold" }}>{w}</Text></View>)}
-                </View>
+          <View key={idx} style={{ backgroundColor: "white", borderRadius: 12, marginBottom: 10, overflow: "hidden" }}>
+            <TouchableOpacity
+              onPress={() => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setExpanded(expanded === idx ? null : idx);
+              }}
+              style={{ padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ fontSize: 15, fontWeight: "bold", color: "#1a1a1a" }}>"{item.sentence}"</Text>
+              <Ionicons name={expanded === idx ? "chevron-up" : "chevron-down"} size={16} color="#999" />
+            </TouchableOpacity>
+            {expanded === idx && (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: "#999", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>WHATSAPP</Text>
+                {[["iPhone","#555",item.iphone],["Samsung","#333",item.samsung],["Xiaomi","#444",item.xiaomi]].map(([brand,color,words]) => (
+                  <View key={brand} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#666", width: 80 }}>{brand}</Text>
+                    <View style={{ flexDirection: "row", gap: 4, flexWrap: "wrap" }}>
+                      {words.map((w, wi) => (
+                        <View key={wi} style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: "#555" }}>
+                          <Text style={{ color: "white", fontSize: 11, fontWeight: "bold" }}>{w}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+                <Text style={{ fontSize: 10, fontWeight: "700", color: "#18181b", textTransform: "uppercase", letterSpacing: 1.5, marginTop: 12, marginBottom: 8 }}>CHATSENSE</Text>
+                {[["arkadas",item.arkadas],["hoca",item.hoca],["is",item.is]].map(([ckey, words]) => (
+                  <View key={ckey} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: "#18181b", width: 80 }}>{CONTEXTS[ckey].label}</Text>
+                    <View style={{ flexDirection: "row", gap: 4, flexWrap: "wrap" }}>
+                      {words.map((w, wi) => (
+                        <View key={wi} style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: "#18181b" }}>
+                          <Text style={{ color: "white", fontSize: 11, fontWeight: "bold" }}>{w}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ))}
               </View>
-            ))}
-            <Text style={{ fontSize: 10, fontWeight: "700", color: "#18181b", textTransform: "uppercase", letterSpacing: 1.5, letterSpacing: 1, marginTop: 10, marginBottom: 8 }}>✨ ChatSense</Text>
-            {[["arkadas","#18181b",item.arkadas],["hoca","#18181b",item.hoca],["is","#18181b",item.is]].map(([ckey,color,words]) => (
-              <View key={ckey} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 8 }}>
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#18181b", width: 80 }}>{CONTEXTS[ckey].label}</Text>
-                <View style={{ flexDirection: "row", gap: 4 }}>
-                  {words.map((w,i) => <View key={i} style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: color }}><Text style={{ color: "white", fontSize: 11, fontWeight: "bold" }}>{w}</Text></View>)}
-                </View>
-              </View>
-            ))}
+            )}
           </View>
         ))}
       </ScrollView>
