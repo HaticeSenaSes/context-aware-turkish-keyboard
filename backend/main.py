@@ -264,7 +264,7 @@ async def predict(req: PredictRequest, request: Request):
             clean = re.sub(r"[^\w\s]", "", clean).strip()
             if clean and len(clean) > 1:
                 suggestions.append(clean.lower())
-        suggestions = suggestions[:3]
+        suggestions = list(dict.fromkeys(suggestions))[:3]
         if len(suggestions) < 2:
             raise ValueError("Yetersiz öneri")
         return {"suggestions": suggestions, "context": req.context, "source": "groq"}
