@@ -7,7 +7,8 @@ import {
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "react-native";
+import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
+import { Image, Animated as RNAnimated } from "react-native";
 import * as Haptics from "expo-haptics";
 
 
@@ -38,6 +39,7 @@ function ChatScreen({ route }) {
   const [warning, setWarning] = useState(null);
   const [completing, setCompleting] = useState(false);
   const scrollRef = useRef(null);
+  const suggestAnim = useRef(new RNAnimated.Value(0)).current;
   const ctx = CONTEXTS[context] || CONTEXTS.arkadas;
 
   useEffect(() => {
@@ -64,7 +66,12 @@ function ChatScreen({ route }) {
         body: JSON.stringify({ text, context, n_suggestions: 3, history: [] }),
       });
       const data = await res.json();
-      setSuggestions(data.suggestions || []);
+      const newSuggestions = data.suggestions || [];
+      setSuggestions(newSuggestions);
+      if (newSuggestions.length > 0) {
+        suggestAnim.setValue(0);
+        RNAnimated.spring(suggestAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 8 }).start();
+      }
     } catch { setSuggestions([]); }
   }
 
@@ -162,14 +169,16 @@ function ChatScreen({ route }) {
         </TouchableOpacity>
       )}
       {suggestions.length > 0 && (
-        <View style={{ flexDirection: "row", backgroundColor: "#F8F8F8", borderTopWidth: 1, borderColor: "#eee" }}>
+        <RNAnimated.View style={{ flexDirection: "row", backgroundColor: "#F8F8F8", borderTopWidth: 1, borderColor: "#eee",
+          opacity: suggestAnim,
+          transform: [{ translateY: suggestAnim.interpolate({ inputRange: [0,1], outputRange: [8,0] }) }] }}>
           {suggestions.map((sg, i) => (
             <TouchableOpacity key={i} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); acceptSuggestion(sg); }}
               style={{ flex: 1, padding: 12, alignItems: "center", borderRightWidth: i < suggestions.length - 1 ? 1 : 0, borderRightColor: "#e5e5e5" }}>
               <Text style={{ fontSize: 14, color: "#333", fontWeight: "500" }}>{sg}</Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </RNAnimated.View>
       )}
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={{ flexDirection: "row", padding: 10, backgroundColor: "white", alignItems: "flex-end", borderTopWidth: 1, borderColor: "#f0f0f0" }}>
@@ -238,25 +247,33 @@ function ContactsScreen({ navigation }) {
             </View>
           </View>
         )}
-        {contacts.map(c => {
-          const cv = CONTEXTS[c.context] || CONTEXTS.arkadas;
-          return (
-            <TouchableOpacity key={c.id}
-              onPress={() => navigation.navigate("Chat", { context: c.context, contact: c })}
-              onLongPress={() => deleteContact(c.id)}
-              style={{ backgroundColor: "white", borderRadius: 12, padding: 16, marginBottom: 10, flexDirection: "row", alignItems: "center" }}>
-              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#18181b", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
-                <Text style={{ fontSize: 16, color: "white", fontWeight: "bold" }}>{c.name[0]}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: "bold", color: "#1a1a1a" }}>{c.name}</Text>
-                <Text style={{ fontSize: 12, marginTop: 2, color: cv.color }}>{cv.label} bağlamı</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+        {contacts.map(contact => {
+          const cv = CONTEXTS[contact.context] || CONTEXTS.arkadas;
+          const renderRightActions = () => (
+            <TouchableOpacity
+              onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); deleteContact(contact.id); }}
+              style={{ backgroundColor: "#ef4444", justifyContent: "center", alignItems: "center", width: 80, borderRadius: 12, marginBottom: 10, marginLeft: -12 }}>
+              <Ionicons name="trash-outline" size={20} color="white" />
+              <Text style={{ color: "white", fontSize: 11, marginTop: 2 }}>Sil</Text>
             </TouchableOpacity>
           );
+          return (
+            <Swipeable key={contact.id} renderRightActions={renderRightActions}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("Chat", { context: contact.context, contact: contact })}
+                style={{ backgroundColor: "white", borderRadius: 12, padding: 16, marginBottom: 10, flexDirection: "row", alignItems: "center" }}>
+                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#18181b", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+                  <Text style={{ fontSize: 16, color: "white", fontWeight: "bold" }}>{contact.name[0]}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "bold", color: "#1a1a1a" }}>{contact.name}</Text>
+                  <Text style={{ fontSize: 12, marginTop: 2, color: "#666" }}>{cv.label} bağlamı</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#ccc" />
+              </TouchableOpacity>
+            </Swipeable>
+          );
         })}
-        <Text style={{ textAlign: "center", color: "#bbb", fontSize: 12, marginTop: 8 }}>Uzun basarak kişiyi silebilirsin</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -362,6 +379,7 @@ function CompareScreen() {
 
 export default function App() {
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer>
       <Tab.Navigator
         screenOptions={({ route }) => ({
@@ -381,6 +399,7 @@ export default function App() {
         <Tab.Screen name="Araştırma" component={ResearchScreen} />
       </Tab.Navigator>
     </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }
 
