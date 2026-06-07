@@ -239,11 +239,17 @@ async def predict(req: PredictRequest, request: Request):
             messages=[
                 {
                     "role": "system",
-                    "content": "Sen bir Türkçe klavye öneri sistemisin. Kullanicinin yazdigi metnin DEVAMINA gelebilecek 3 AYRI kelime oner. Her oneri tek kelime olmali. SADECE su formatta yaz: kelime1,kelime2,kelime3"
+                    "content": (
+                        f"Sen bir Türkçe klavye öneri sistemisin. "
+                        f"Aktif bağlam: {context_label}. "
+                        f"Bu bağlamda yazışma tarzı: arkadas=samimi/argo/kanka/nbr, hoca=saygılı/resmi/hocam/teşekkür, is=profesyonel/toplantı/rapor, spor=enerjik/antrenman/maç, gundelik=rahat/tamam/olur. "
+                        f"Metnin devamına gelebilecek 3 FARKLI Türkçe kelime öner. Bağlama uygun kelimeler seç. "
+                        f"SADECE format: kelime1,kelime2,kelime3"
+                    )
                 },
                 {
                     "role": "user",
-                    "content": f"Metin: {req.text} | Bagllam: {context_label} | 3 ayri tek Turkce kelime yaz. Format: kelime1,kelime2,kelime3"
+                    "content": f"{req.text}"
                 }
             ]
         )
