@@ -3,16 +3,17 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, StatusBar, KeyboardAvoidingView, Platform,
   SafeAreaView, Alert, Image, Animated as RNAnimated,
-  LayoutAnimation, UIManager
+  LayoutAnimation, UIManager, TouchableWithoutFeedback, Keyboard
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 
-const API = "http://localhost:8000";
+const API = "http://192.168.1.103:8000";
 
 const CONTEXTS = {
   arkadas: { label: "Arkadaş", emoji: "", color: "#18181b", light: "#f4f4f5" },
@@ -45,6 +46,20 @@ function ChatScreen({ route }) {
   const scrollRef = useRef(null);
   const suggestAnim = useRef(new RNAnimated.Value(0)).current;
   const ctx = CONTEXTS[context] || CONTEXTS.arkadas;
+
+  // Mesajları yükle
+  useEffect(() => {
+    AsyncStorage.getItem("messages_" + context).then(val => {
+      if (val) setMessages(JSON.parse(val));
+    }).catch(() => {});
+  }, [context]);
+
+  // Mesajları kaydet
+  useEffect(() => {
+    if (messages.length > 0) {
+      AsyncStorage.setItem("messages_" + context, JSON.stringify(messages.slice(-50)));
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (route?.params?.context) setContext(route.params.context);
@@ -137,7 +152,22 @@ function ChatScreen({ route }) {
         style={{ backgroundColor: "white", maxHeight: 52, borderBottomWidth: 1, borderColor: "#f0f0f0" }}
         contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
         {Object.entries(CONTEXTS).map(([key, val]) => (
-          <TouchableOpacity key={key} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setContext(key); }}
+          <TouchableOpacity key={key} onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (messages.length > 0 && context !== key) {
+                    Alert.alert(
+                      "Bağlam Değiştir",
+                      `${CONTEXTS[key].label} bağlamına geçmek istiyor musun? Mevcut sohbet silinecek.`,
+                      [
+                        { text: "İptal", style: "cancel" },
+                        { text: "Geç", onPress: () => { setMessages([]); setContext(key); } }
+                      ]
+                    );
+                  } else {
+                    setMessages([]);
+                    setContext(key);
+                  }
+                }}
             style={[s.ctxBtn, { borderColor: val.color, backgroundColor: context === key ? val.color : "white", marginRight: 8 }]}>
             <Text style={{ fontSize: 12, fontWeight: "600", color: context === key ? "white" : val.color }}>
               {val.emoji} {val.label}
@@ -145,7 +175,7 @@ function ChatScreen({ route }) {
           </TouchableOpacity>
         ))}
       </ScrollView>
-      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled" onScrollBeginDrag={Keyboard.dismiss}>
         {messages.length === 0 && (
           <View style={{ alignItems: "center", marginTop: 60 }}>
             <Text style={{ fontSize: 48, marginBottom: 12 }}>{ctx.emoji}</Text>
@@ -292,7 +322,7 @@ function ResearchScreen() {
   ];
   const chiData = [
     ["Bugün hava", "72.00"], ["Bu hafta sonu", "119.27"], ["Seni çok", "34.16"],
-    ["Sinav icin", "121.48"], ["Mukadder", "274.69"], ["Bence en iyisi", "108.38"],
+    ["Sinav icin", "121.48"], ["Mükedder", "274.69"], ["Bence en iyisi", "108.38"],
   ];
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f4f4f5" }}>
@@ -319,8 +349,8 @@ function ResearchScreen() {
             ))}
           </View>
           {chiData.map(([sentence, chi], i) => (
-            <View key={i} style={{ flexDirection: "row", padding: 10, borderBottomWidth: 1, borderColor: "#f0f0f0", backgroundColor: sentence === "Mukadder" ? "#f0f0f0" : i % 2 === 1 ? "#f8f8f8" : "white" }}>
-              <Text style={{ flex: 2, fontSize: 13, color: "#333", fontWeight: sentence === "Mukadder" ? "bold" : "normal" }}>"{sentence}" {sentence === "Mukadder" ? "★" : ""}</Text>
+            <View key={i} style={{ flexDirection: "row", padding: 10, borderBottomWidth: 1, borderColor: "#f0f0f0", backgroundColor: sentence === "Mükedder" ? "#f0f0f0" : i % 2 === 1 ? "#f8f8f8" : "white" }}>
+              <Text style={{ flex: 2, fontSize: 13, color: "#333", fontWeight: sentence === "Mükedder" ? "bold" : "normal" }}>{sentence === "Mükedder" ? <Text style={{color:"#f59e0b"}}>"{sentence}" ★</Text> : `"${sentence}"`}</Text>
               <Text style={{ flex: 1, fontSize: 13, fontWeight: "bold", color: "#18181b" }}>{chi}</Text>
               <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#555" }}>{"<0.001"}</Text>
             </View>
@@ -413,7 +443,7 @@ export default function App() {
           headerShown: false,
           tabBarStyle: { backgroundColor: "#18181b", borderTopWidth: 0, height: 60, paddingBottom: 8 },
           tabBarActiveTintColor: "#ffffff",
-          tabBarInactiveTintColor: "#555",
+          tabBarInactiveTintColor: "rgba(255,255,255,0.55)",
           tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
           tabBarIcon: ({ focused, color }) => {
             const icons = { Chat: focused ? "chatbubble" : "chatbubble-outline", Kişiler: focused ? "people" : "people-outline", Karşılaştır: focused ? "swap-horizontal" : "swap-horizontal-outline", Araştırma: focused ? "bar-chart" : "bar-chart-outline" };
