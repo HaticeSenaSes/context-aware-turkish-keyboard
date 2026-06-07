@@ -239,11 +239,11 @@ async def predict(req: PredictRequest, request: Request):
             messages=[
                 {
                     "role": "system",
-                    "content": "Sen bir Türkçe klavye öneri sistemisin. SADECE virgülle ayrılmış 3 kelime üret. Başka hiçbir şey yazma. Format: kelime1,kelime2,kelime3"
+                    "content": "Sen bir Türkçe klavye öneri sistemisin. Kullanicinin yazdigi metnin DEVAMINA gelebilecek 3 AYRI kelime oner. Her oneri tek kelime olmali. SADECE su formatta yaz: kelime1,kelime2,kelime3"
                 },
                 {
                     "role": "user",
-                    "content": f'{gecmis}{context_label} bağlamında "{req.text}" ifadesinden sonra gelebilecek 3 Türkçe kelime.'
+                    "content": f"Metin: {req.text} | Bagllam: {context_label} | 3 ayri tek Turkce kelime yaz. Format: kelime1,kelime2,kelime3"
                 }
             ]
         )
@@ -257,7 +257,7 @@ async def predict(req: PredictRequest, request: Request):
         suggestions = []
         for p in parts:
             clean = re.sub(r"^[\d\.\-\)\s]+", "", p.strip())
-            clean = re.sub(r"[^\w]", "", clean)
+            clean = re.sub(r"[^\w\s]", "", clean).strip()
             if clean and len(clean) > 1:
                 suggestions.append(clean.lower())
         suggestions = suggestions[:3]

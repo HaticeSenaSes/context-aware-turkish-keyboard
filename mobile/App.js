@@ -192,10 +192,10 @@ function ChatScreen({ route, darkMode, setDarkMode }) {
           </View>
         )}
         {messages.map((m, i) => (
-          <View key={i} style={[s.bubble, { backgroundColor: isDark ? "#3b2d6e" : "#e8e0ff" }]}>
+          <TouchableOpacity key={i} onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert("Mesajı Sil", "Bu mesajı silmek istiyor musun?", [{text: "İptal", style: "cancel"}, {text: "Sil", style: "destructive", onPress: () => setMessages(prev => prev.filter((_, idx) => idx !== i))}]); }} style={[s.bubble, { backgroundColor: isDark ? "#3b2d6e" : "#e8e0ff" }]}>
             <Text style={{ fontSize: 15, color: isDark ? "#ffffff" : "#3b2d6e", lineHeight: 20 }}>{m.text}</Text>
             <Text style={{ fontSize: 10, color: isDark ? "rgba(255,255,255,0.5)" : "#7c6aad", marginTop: 4, textAlign: "right" }}>{m.time}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </ScrollView>
       {warning && (
@@ -264,7 +264,10 @@ function ContactsScreen({ navigation, darkMode }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
       <View style={[s.header, { justifyContent: "space-between" }]}>
-        <Text style={s.headerTitle}>Kişiler</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Image source={require("./assets/icon.png")} style={{ width: 32, height: 32, borderRadius: 8 }} />
+          <Text style={s.headerTitle}>Kişiler</Text>
+        </View>
         <TouchableOpacity onPress={() => setShowAdd(true)} style={[s.csLogo, { backgroundColor: "#18181b" }]}>
           <Ionicons name="add" size={22} color="white" />
         </TouchableOpacity>
@@ -342,9 +345,12 @@ function ResearchScreen({ darkMode, setDarkMode }) {
   ];
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
-      <View style={[s.header, {flexDirection: "column", alignItems: "flex-start"}]}>
-        <Text style={s.headerTitle}>Araştırma</Text>
-        <Text style={s.headerSub}>94 katılımcı • 6 test cümlesi</Text>
+      <View style={[s.header, { flexDirection: "row", alignItems: "center" }]}>
+        <Image source={require("./assets/icon.png")} style={{ width: 32, height: 32, borderRadius: 8, marginRight: 10 }} />
+        <View>
+          <Text style={s.headerTitle}>Araştırma</Text>
+          <Text style={[s.headerSub, {marginTop: 2}]}>94 katılımcı  •  6 test cümlesi</Text>
+        </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Text style={s.sectionTitle}>Temel Bulgular</Text>
@@ -396,8 +402,14 @@ function CompareScreen({ darkMode }) {
   ];
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
-      <View style={[s.header, {flexDirection: "column", alignItems: "flex-start"}]}>
-        <Text style={s.headerTitle}>Karşılaştır</Text>
+      <View style={[s.header, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Image source={require("./assets/icon.png")} style={{ width: 32, height: 32, borderRadius: 8 }} />
+          <View>
+            <Text style={s.headerTitle}>Karşılaştır</Text>
+            <Text style={[s.headerSub, {marginTop: 2}]}>WhatsApp vs ChatSense</Text>
+          </View>
+        </View>
         <Text style={[s.headerSub, {marginTop: 2}]}>WhatsApp vs ChatSense</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
@@ -501,7 +513,8 @@ function SettingsScreen({ darkMode, setDarkMode }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }}>
-      <View style={s.header}>
+      <View style={[s.header, { flexDirection: "row", alignItems: "center", gap: 10 }]}>
+        <Image source={require("./assets/icon.png")} style={{ width: 32, height: 32, borderRadius: 8 }} />
         <Text style={s.headerTitle}>Ayarlar</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
@@ -592,12 +605,12 @@ export default function App() {
           tabBarInactiveTintColor: "rgba(255,255,255,0.55)",
           tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
           tabBarIcon: ({ focused, color }) => {
-            const icons = { Chat: focused ? "chatbubble" : "chatbubble-outline", Kişiler: focused ? "people" : "people-outline", Karşılaştır: focused ? "swap-horizontal" : "swap-horizontal-outline", Araştırma: focused ? "bar-chart" : "bar-chart-outline", Ayarlar: focused ? "settings" : "settings-outline" };
+            const icons = { Kişiler: focused ? "people" : "people-outline", Chat: focused ? "chatbubble" : "chatbubble-outline", Karşılaştır: focused ? "swap-horizontal" : "swap-horizontal-outline", Araştırma: focused ? "bar-chart" : "bar-chart-outline", Ayarlar: focused ? "settings" : "settings-outline" };
             return <Ionicons name={icons[route.name]} size={22} color={color} />;
           },
         })}>
-        <Tab.Screen name="Chat">{(props) => <ChatScreen {...props} darkMode={darkMode} setDarkMode={setDarkMode} />}</Tab.Screen>
         <Tab.Screen name="Kişiler">{(props) => <ContactsScreen {...props} darkMode={darkMode} />}</Tab.Screen>
+        <Tab.Screen name="Chat">{(props) => <ChatScreen {...props} darkMode={darkMode} setDarkMode={setDarkMode} />}</Tab.Screen>
         <Tab.Screen name="Karşılaştır">{(props) => <CompareScreen {...props} darkMode={darkMode} />}</Tab.Screen>
         <Tab.Screen name="Araştırma">{(props) => <ResearchScreen {...props} darkMode={darkMode} setDarkMode={setDarkMode} />}</Tab.Screen>
         <Tab.Screen name="Ayarlar">{(props) => <SettingsScreen {...props} darkMode={darkMode} setDarkMode={setDarkMode} />}</Tab.Screen>
