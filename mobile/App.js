@@ -1,31 +1,52 @@
 import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, StatusBar, KeyboardAvoidingView, Platform, SafeAreaView
+  StyleSheet, StatusBar, KeyboardAvoidingView, Platform,
+  SafeAreaView, Alert
 } from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
+import { Image } from "react-native";
+import * as Haptics from "expo-haptics";
+
 
 const API = "http://localhost:8000";
 
 const CONTEXTS = {
-  arkadaş: { label: "Arkadaş", emoji: "👫", color: "#25D366" },
-  hoca:    { label: "Hoca",    emoji: "👨‍🏫", color: "#2196F3" },
-  is:      { label: "İş",      emoji: "💼",  color: "#9C27B0" },
-  spor:    { label: "Spor",    emoji: "⚽",  color: "#FF5722" },
-  gundelik:{ label: "Gündelik",emoji: "☀️",  color: "#FF9800" },
+  arkadas: { label: "Arkadaş", emoji: "", color: "#18181b", light: "#f4f4f5" },
+  hoca:    { label: "Hoca",    emoji: "", color: "#18181b", light: "#f4f4f5" },
+  is:      { label: "İş",      emoji: "", color: "#18181b", light: "#f4f4f5" },
+  spor:    { label: "Spor",    emoji: "", color: "#18181b", light: "#f4f4f5" },
+  gundelik:{ label: "Gündelik",emoji: "", color: "#18181b", light: "#f4f4f5" },
 };
 
-export default function App() {
-  const [context, setContext] = useState("arkadaş");
+const DEFAULT_CONTACTS = [
+  { id: 1, name: "Hocam", context: "hoca", emoji: "👨‍🏫" },
+  { id: 2, name: "Kankam", context: "arkadas", emoji: "👫" },
+  { id: 3, name: "Müdürüm", context: "is", emoji: "💼" },
+];
+
+const Tab = createBottomTabNavigator();
+
+function ChatScreen({ route }) {
+  const initialContext = route?.params?.context || "arkadas";
+  const [context, setContext] = useState(initialContext);
   const [text, setText] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [messages, setMessages] = useState([]);
   const [warning, setWarning] = useState(null);
+  const [completing, setCompleting] = useState(false);
   const scrollRef = useRef(null);
-  const ctx = CONTEXTS[context];
+  const ctx = CONTEXTS[context] || CONTEXTS.arkadas;
+
+  useEffect(() => {
+    if (route?.params?.context) setContext(route.params.context);
+  }, [route?.params]);
 
   useEffect(() => {
     if (!text.trim()) { setSuggestions([]); return; }
-    const t = setTimeout(fetchSuggestions);
+    const t = setTimeout(fetchSuggestions, 400);
     return () => clearTimeout(t);
   }, [text, context]);
 
@@ -37,7 +58,6 @@ export default function App() {
 
   async function fetchSuggestions() {
     try {
-      setSuggestions([]);
       const res = await fetch(API + "/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -60,6 +80,20 @@ export default function App() {
     } catch {}
   }
 
+  async function completeSentence() {
+    if (!text.trim()) return;
+    try {
+      const res = await fetch(API + "/suggest-sentence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, context }),
+      });
+      const data = await res.json();
+      if (data.suggestion) setText(data.suggestion);
+    } catch {}
+    setCompleting(false);
+  }
+
   function acceptSuggestion(word) {
     const parts = text.split(" ");
     parts[parts.length - 1] = word;
@@ -72,90 +106,80 @@ export default function App() {
       text: text.trim(), context,
       time: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
     }]);
-    setText("");
-    setSuggestions([]);
-    setWarning(null);
-    setTimeout(() => scrollRef.current && scrollRef.current.scrollToEnd({ animated: true }), 100);
+    setText(""); setSuggestions([]); setWarning(null);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f5f5f5" }}>
-      <StatusBar barStyle="light-content" />
-
-      <View style={[styles.header, { backgroundColor: ctx.color }]}>
-        <Text style={styles.headerTitle}>Bağlam Duyarlı Öneri</Text>
-        <Text style={styles.headerSub}>{ctx.emoji} {ctx.label} bağlamı aktif</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f4f4f5" }}>
+      <StatusBar barStyle="light-content" backgroundColor="#18181b" />
+      <View style={s.header}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Image source={require("./assets/icon.png")} style={{ width: 36, height: 36, borderRadius: 8 }} />
+          <View>
+            <Text style={s.headerTitle}>ChatSense</Text>
+            <Text style={s.headerSub}>{ctx.emoji} {ctx.label} bağlamı</Text>
+          </View>
+        </View>
       </View>
-
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        style={{ backgroundColor: "white", maxHeight: 52, borderBottomWidth: 1, borderColor: "#eee" }}
-        contentContainerStyle={{ padding: 8, gap: 8 }}>
+        style={{ backgroundColor: "white", maxHeight: 52, borderBottomWidth: 1, borderColor: "#f0f0f0" }}
+        contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
         {Object.entries(CONTEXTS).map(([key, val]) => (
-          <TouchableOpacity key={key} onPress={() => setContext(key)}
-            style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5,
-              borderColor: val.color, backgroundColor: context === key ? val.color : "white", marginRight: 8 }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: context === key ? "white" : val.color }}>
+          <TouchableOpacity key={key} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setContext(key); }}
+            style={[s.ctxBtn, { borderColor: val.color, backgroundColor: context === key ? val.color : "white", marginRight: 8 }]}>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: context === key ? "white" : val.color }}>
               {val.emoji} {val.label}
             </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
-
       <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
         {messages.length === 0 && (
-          <Text style={{ textAlign: "center", color: "#aaa", marginTop: 40, fontSize: 14 }}>
-            Yazmaya başla, sistem bağlama göre öneri sunsun
-          </Text>
+          <View style={{ alignItems: "center", marginTop: 60 }}>
+            <Text style={{ fontSize: 48, marginBottom: 12 }}>{ctx.emoji}</Text>
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: "#1a1a1a", marginBottom: 6 }}>{ctx.label} bağlamı aktif</Text>
+            <Text style={{ fontSize: 14, color: "#888", textAlign: "center" }}>Yazmaya başla, sistem bağlama göre öneri sunsun</Text>
+          </View>
         )}
         {messages.map((m, i) => (
-          <View key={i} style={{ alignSelf: "flex-end", backgroundColor: "#DCF8C6",
-            borderRadius: 12, padding: 10, marginBottom: 8, maxWidth: "80%" }}>
-            <Text style={{ fontSize: 15, color: "#1a1a1a" }}>{m.text}</Text>
-            <Text style={{ fontSize: 10, color: "#888", marginTop: 4, textAlign: "right" }}>
-              {CONTEXTS[m.context].emoji} {m.time}
-            </Text>
+          <View key={i} style={s.bubble}>
+            <Text style={{ fontSize: 15, color: "#1a1a1a", lineHeight: 20 }}>{m.text}</Text>
+            <Text style={{ fontSize: 10, color: "#888", marginTop: 4, textAlign: "right" }}>{CONTEXTS[m.context]?.emoji} {m.time}</Text>
           </View>
         ))}
       </ScrollView>
-
       {warning && (
-        <View style={{ backgroundColor: "#FFF8E1", padding: 12, borderLeftWidth: 4,
-          borderLeftColor: "#FF9800", margin: 8, borderRadius: 8 }}>
-          <Text style={{ color: "#E65100", fontSize: 13, fontWeight: "bold" }}>⚠️ {warning.message}</Text>
-          {warning.suggestion && (
-            <Text style={{ color: "#666", fontSize: 12, marginTop: 4 }}>💡 {warning.suggestion}</Text>
-          )}
+        <View style={s.warningBox}>
+          <Text style={{ color: "#92400e", fontSize: 13, fontWeight: "bold" }}>⚠️ {warning.message}</Text>
+          {warning.suggestion && <Text style={{ color: "#666", fontSize: 12, marginTop: 4 }}>💡 {warning.suggestion}</Text>}
         </View>
       )}
-
+      {text.length > 3 && (
+        <TouchableOpacity onPress={completeSentence}
+          style={{ marginHorizontal: 12, marginBottom: 4, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: ctx.color, backgroundColor: ctx.color + "22", alignItems: "center" }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: ctx.color }}>{completing ? "..." : "✨ Cümleyi Tamamla"}</Text>
+        </TouchableOpacity>
+      )}
       {suggestions.length > 0 && (
-        <View style={{ flexDirection: "row", backgroundColor: "#F0F0F0",
-          borderTopWidth: 1, borderColor: "#ddd" }}>
-          {suggestions.map((s, i) => (
-            <TouchableOpacity key={i} onPress={() => acceptSuggestion(s)}
-              style={{ flex: 1, padding: 12, alignItems: "center",
-                borderRightWidth: i < suggestions.length - 1 ? 1 : 0, borderRightColor: "#ddd" }}>
-              <Text style={{ fontSize: 14, color: "#333", fontWeight: "500" }}>{s}</Text>
+        <View style={{ flexDirection: "row", backgroundColor: "#F8F8F8", borderTopWidth: 1, borderColor: "#eee" }}>
+          {suggestions.map((sg, i) => (
+            <TouchableOpacity key={i} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); acceptSuggestion(sg); }}
+              style={{ flex: 1, padding: 12, alignItems: "center", borderRightWidth: i < suggestions.length - 1 ? 1 : 0, borderRightColor: "#e5e5e5" }}>
+              <Text style={{ fontSize: 14, color: "#333", fontWeight: "500" }}>{sg}</Text>
             </TouchableOpacity>
           ))}
         </View>
       )}
-
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <View style={{ flexDirection: "row", padding: 8, backgroundColor: "white",
-          alignItems: "flex-end", borderTopWidth: 1, borderColor: "#eee" }}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder={ctx.emoji + " " + ctx.label + " bağlamında yaz......"}
-            style={{ flex: 1, backgroundColor: "#f5f5f5", borderRadius: 20,
-              paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 100 }}
-            multiline
-          />
-          <TouchableOpacity onPress={sendMessage}
-            style={{ width: 44, height: 44, borderRadius: 22, justifyContent: "center",
-              alignItems: "center", marginLeft: 8, backgroundColor: ctx.color }}>
-            <Text style={{ color: "white", fontSize: 18 }}>➤</Text>
+        <View style={{ flexDirection: "row", padding: 10, backgroundColor: "white", alignItems: "flex-end", borderTopWidth: 1, borderColor: "#f0f0f0" }}>
+          <TextInput value={text} onChangeText={setText}
+            placeholder={ctx.emoji + " " + ctx.label + " bağlamında yaz..."}
+            placeholderTextColor="#aaa"
+            style={{ flex: 1, backgroundColor: "#f4f4f5", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 100, color: "#1a1a1a" }}
+            multiline />
+          <TouchableOpacity onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); sendMessage(); }} style={[s.sendBtn, { backgroundColor: ctx.color }]}>
+            <Ionicons name="send" size={18} color="white" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -163,8 +187,212 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: { padding: 16, paddingTop: 8 },
-  headerTitle: { color: "white", fontSize: 18, fontWeight: "bold" },
-  headerSub: { color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2 },
+function ContactsScreen({ navigation }) {
+  const [contacts, setContacts] = useState(DEFAULT_CONTACTS);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newCtx, setNewCtx] = useState("arkadas");
+
+  function addContact() {
+    if (!newName.trim()) return;
+    setContacts(prev => [...prev, { id: Date.now(), name: newName.trim(), context: newCtx, emoji: CONTEXTS[newCtx].emoji }]);
+    setNewName(""); setShowAdd(false);
+  }
+
+  function deleteContact(id) {
+    Alert.alert("Sil", "Bu kisiyi silmek istiyor musun?", [
+      { text: "Iptal", style: "cancel" },
+      { text: "Sil", style: "destructive", onPress: () => setContacts(prev => prev.filter(c => c.id !== id)) }
+    ]);
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f4f4f5" }}>
+      <View style={[s.header, { justifyContent: "space-between" }]}>
+        <Text style={s.headerTitle}>Kişiler</Text>
+        <TouchableOpacity onPress={() => setShowAdd(true)} style={[s.csLogo, { backgroundColor: "#18181b" }]}>
+          <Ionicons name="add" size={22} color="white" />
+        </TouchableOpacity>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        {showAdd && (
+          <View style={{ backgroundColor: "white", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <Text style={{ fontSize: 16, fontWeight: "bold", marginBottom: 12 }}>Yeni Kişi Ekle</Text>
+            <TextInput value={newName} onChangeText={setNewName} placeholder="İsim (örn. Hocam, Annem)"
+              style={{ backgroundColor: "#f4f4f5", borderRadius: 10, padding: 12, fontSize: 15, marginBottom: 12 }} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              {Object.entries(CONTEXTS).map(([key, val]) => (
+                <TouchableOpacity key={key} onPress={() => setNewCtx(key)}
+                  style={[s.ctxBtn, { borderColor: val.color, marginRight: 8, backgroundColor: newCtx === key ? val.color : "white" }]}>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: newCtx === key ? "white" : val.color }}>{val.emoji} {val.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity onPress={addContact} style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: "#18181b", alignItems: "center" }}>
+                <Text style={{ color: "white", fontWeight: "bold" }}>Kaydet</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowAdd(false)} style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: "#f4f4f5", alignItems: "center", borderWidth: 1, borderColor: "#ddd" }}>
+                <Text style={{ color: "#666" }}>Iptal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        {contacts.map(c => {
+          const cv = CONTEXTS[c.context] || CONTEXTS.arkadas;
+          return (
+            <TouchableOpacity key={c.id}
+              onPress={() => navigation.navigate("Chat", { context: c.context, contact: c })}
+              onLongPress={() => deleteContact(c.id)}
+              style={{ backgroundColor: "white", borderRadius: 12, padding: 16, marginBottom: 10, flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#18181b", justifyContent: "center", alignItems: "center", marginRight: 12 }}>
+                <Text style={{ fontSize: 16, color: "white", fontWeight: "bold" }}>{c.name[0]}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: "bold", color: "#1a1a1a" }}>{c.name}</Text>
+                <Text style={{ fontSize: 12, marginTop: 2, color: cv.color }}>{cv.label} bağlamı</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+          );
+        })}
+        <Text style={{ textAlign: "center", color: "#bbb", fontSize: 12, marginTop: 8 }}>Uzun basarak kişiyi silebilirsin</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function ResearchScreen() {
+  const findings = [
+    { icon: "01", title: "Telefon Markası Belirleyici", desc: "Cinsiyet, yaş, bölüm etkisiz. Sadece marka farklılaştırıyor." },
+    { icon: "02", title: "iPhone En Homojen", desc: "5/6 cümlede en düşük entropi. iOS en standart önerileri veriyor." },
+    { icon: "03", title: "'Seni çok' → %87 'seviyorum'", desc: "Duygusal dil en standartlaşmış register." },
+    { icon: "04", title: "Nadir Kelime Testi", desc: "'Mükedder' için en yüksek chi² = 274.69" },
+  ];
+  const chiData = [
+    ["Bugün hava", "72.00"], ["Bu hafta sonu", "119.27"], ["Seni çok", "34.16"],
+    ["Sinav icin", "121.48"], ["Mukadder", "274.69"], ["Bence en iyisi", "108.38"],
+  ];
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f4f4f5" }}>
+      <View style={s.header}>
+        <Text style={s.headerTitle}>Araştırma</Text>
+        <Text style={s.headerSub}>94 katılımcı • 6 test cümlesi</Text>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <Text style={s.sectionTitle}>Temel Bulgular</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+          {findings.map((f, i) => (
+            <View key={i} style={{ width: "47%", backgroundColor: "white", borderRadius: 12, padding: 14 }}>
+              <View style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: "#18181b", justifyContent: "center", alignItems: "center", marginBottom: 8 }}><Text style={{ color: "white", fontSize: 11, fontWeight: "bold" }}>{f.icon}</Text></View>
+              <Text style={{ fontSize: 13, fontWeight: "bold", color: "#1a1a1a", marginBottom: 4 }}>{f.title}</Text>
+              <Text style={{ fontSize: 11, color: "#666", lineHeight: 16 }}>{f.desc}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={s.sectionTitle}>Chi-Square Sonuçları</Text>
+        <View style={{ backgroundColor: "white", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+          <View style={{ flexDirection: "row", backgroundColor: "#18181b", padding: 10 }}>
+            {["Test Cumlesi", "Chi²", "p"].map(h => (
+              <Text key={h} style={{ flex: h === "Test Cumlesi" ? 2 : 1, color: "white", fontWeight: "bold", fontSize: 13 }}>{h}</Text>
+            ))}
+          </View>
+          {chiData.map(([sentence, chi], i) => (
+            <View key={i} style={{ flexDirection: "row", padding: 10, borderBottomWidth: 1, borderColor: "#f0f0f0", backgroundColor: sentence === "Mukadder" ? "#f0f0f0" : i % 2 === 1 ? "#f8f8f8" : "white" }}>
+              <Text style={{ flex: 2, fontSize: 13, color: "#333", fontWeight: sentence === "Mukadder" ? "bold" : "normal" }}>"{sentence}" {sentence === "Mukadder" ? "★" : ""}</Text>
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: "bold", color: "#18181b" }}>{chi}</Text>
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#555" }}>{"<0.001"}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={{ backgroundColor: "#f4f4f5", borderRadius: 12, padding: 16, borderLeftWidth: 4, borderLeftColor: "#18181b" }}>
+          <Text style={{ fontSize: 15, fontWeight: "bold", color: "#18181b", marginBottom: 6 }}>Sonuc</Text>
+          <Text style={{ fontSize: 13, color: "#555", lineHeight: 20 }}>
+            WhatsApp sistemi bireyi degil, isletim sistemini taniyor. ChatSense bu problemi cozuyor.
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function CompareScreen() {
+  const data = [
+    { sentence: "Bugün hava", iphone: ["nasil","çok","güzel"], samsung: ["çok","nasil","iyi"], xiaomi: ["nasil","durumu","iyi"], arkadas: ["çok","güzel","nasil"], hoca: ["iyi","bugün","hocam"], is: ["raporunu","toplanti","iyi"] },
+    { sentence: "Seni çok", iphone: ["seviyorum","özledim","seviyor"], samsung: ["seviyorum","özledim","seviyor"], xiaomi: ["seviyorum","özledim","seviyor"], arkadas: ["özledim","seviyorum","özledik"], hoca: ["tesekkür","saygilarimla","bilgi"], is: ["takdir","degerli","tesekkür"] },
+    { sentence: "Sinav icin", iphone: ["de","bir","da"], samsung: ["mi","çok","bir"], xiaomi: ["hemen","tikladiginizda","icin"], arkadas: ["calisalim","hazirlandin","korktum"], hoca: ["bilgi","tarih","kapsam"], is: ["rapor","hazirlik","sunum"] },
+  ];
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#f4f4f5" }}>
+      <View style={s.header}>
+        <Text style={s.headerTitle}>Karşılaştır</Text>
+        <Text style={s.headerSub}>WhatsApp vs ChatSense</Text>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <View style={{ backgroundColor: "#f4f4f5", borderRadius: 10, padding: 12, marginBottom: 16, borderLeftWidth: 3, borderLeftColor: "#18181b" }}>
+          <Text style={{ fontSize: 13, color: "#555", lineHeight: 18 }}>WhatsApp cihaz bazli standart öneri sunarken, ChatSense alıcıya göre farklılaştırır.</Text>
+        </View>
+        {data.map((item, idx) => (
+          <View key={idx} style={{ backgroundColor: "white", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <Text style={{ fontSize: 16, fontWeight: "bold", marginBottom: 12 }}>"{item.sentence}"</Text>
+            <Text style={{ fontSize: 10, fontWeight: "700", color: "#999", textTransform: "uppercase", letterSpacing: 1.5, letterSpacing: 1, marginBottom: 8 }}>📱 WhatsApp</Text>
+            {[["iPhone","#555",item.iphone],["Samsung","#333",item.samsung],["Xiaomi","#444",item.xiaomi]].map(([brand,color,words]) => (
+              <View key={brand} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#666", width: 80 }}>{brand}</Text>
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  {words.map((w,i) => <View key={i} style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: color }}><Text style={{ color: "white", fontSize: 11, fontWeight: "bold" }}>{w}</Text></View>)}
+                </View>
+              </View>
+            ))}
+            <Text style={{ fontSize: 10, fontWeight: "700", color: "#18181b", textTransform: "uppercase", letterSpacing: 1.5, letterSpacing: 1, marginTop: 10, marginBottom: 8 }}>✨ ChatSense</Text>
+            {[["arkadas","#18181b",item.arkadas],["hoca","#18181b",item.hoca],["is","#18181b",item.is]].map(([ckey,color,words]) => (
+              <View key={ckey} style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#18181b", width: 80 }}>{CONTEXTS[ckey].label}</Text>
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  {words.map((w,i) => <View key={i} style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: color }}><Text style={{ color: "white", fontSize: 11, fontWeight: "bold" }}>{w}</Text></View>)}
+                </View>
+              </View>
+            ))}
+          </View>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarStyle: { backgroundColor: "#18181b", borderTopWidth: 0, height: 60, paddingBottom: 8 },
+          tabBarActiveTintColor: "#ffffff",
+          tabBarInactiveTintColor: "#555",
+          tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+          tabBarIcon: ({ focused, color }) => {
+            const icons = { Chat: focused ? "chatbubble" : "chatbubble-outline", Kişiler: focused ? "people" : "people-outline", Karşılaştır: focused ? "swap-horizontal" : "swap-horizontal-outline", Araştırma: focused ? "bar-chart" : "bar-chart-outline" };
+            return <Ionicons name={icons[route.name]} size={22} color={color} />;
+          },
+        })}>
+        <Tab.Screen name="Chat" component={ChatScreen} />
+        <Tab.Screen name="Kişiler" component={ContactsScreen} />
+        <Tab.Screen name="Karşılaştır" component={CompareScreen} />
+        <Tab.Screen name="Araştırma" component={ResearchScreen} />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}
+
+const s = StyleSheet.create({
+  header: { backgroundColor: "#18181b", padding: 16, paddingTop: 8, flexDirection: "row", alignItems: "center" },
+  headerTitle: { color: "white", fontSize: 17, fontWeight: "bold" },
+  headerSub: { color: "rgba(255,255,255,0.6)", fontSize: 11, marginTop: 1 },
+  csLogo: { width: 34, height: 34, borderRadius: 8, justifyContent: "center", alignItems: "center" },
+  csLogoText: { color: "white", fontWeight: "900", fontSize: 13 },
+  ctxBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5 },
+  bubble: { alignSelf: "flex-end", backgroundColor: "#DCF8C6", borderRadius: 16, borderBottomRightRadius: 4, padding: 12, marginBottom: 8, maxWidth: "80%" },
+  warningBox: { backgroundColor: "#FFF8E1", margin: 8, padding: 12, borderRadius: 10, borderLeftWidth: 4, borderLeftColor: "#f59e0b" },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center", marginLeft: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: "bold", color: "#1a1a1a", marginBottom: 12, marginTop: 8 },
 });
