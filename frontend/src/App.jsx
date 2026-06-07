@@ -31,7 +31,7 @@ const RESEARCH_DATA = {
   ],
 };
 
-const API = "http://localhost:8000";
+const API = "https://context-aware-turkish-keyboard.onrender.com";
 
 const EXAMPLES = {
   arkadas: ["lan bugün ne yapıyorsun", "kanka akşam buluşalım", "ya çok komik oldu"],
