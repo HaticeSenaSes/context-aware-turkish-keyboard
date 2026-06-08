@@ -251,7 +251,7 @@ async def predict(req: PredictRequest, request: Request):
                 },
                 {
                     "role": "user",
-                    "content": f'Devamını tahmin et: "{req.text}"'
+                    "content": f'{"Konuşma geçmişi: " + " | ".join(req.history[-3:]) + chr(10) if req.history else ""}Şu an yazılan: "{req.text}" — devamına gelebilecek 3 kelime:"'
                 }
             ]
         )
