@@ -205,6 +205,7 @@ class PredictRequest(BaseModel):
     n_suggestions: int = 3
     history: list = []
     personal_data: list = []  # [{prev, word}] — kullanıcı kabul geçmişi
+    personal_words: list = []  # ["yeditepe", "bilişim sistemleri"] — kullanıcı tanımlı kelimeler
 
 class WarningRequest(BaseModel):
     text: str
@@ -244,6 +245,7 @@ async def predict(req: PredictRequest, request: Request):
                         f"Aktif bağlam: {context_label}. "
                         f"Bağlam tarzı: arkadas=samimi/argo/kanka/nbr/ya, hoca=saygılı/resmi/hocam/sayın/teşekkür, is=profesyonel/toplantı/rapor, spor=enerjik/maç/antrenman, gundelik=rahat/tamam/olur. "
                         f"{'Önceki mesajlar: ' + ' | '.join(req.history[-3:]) + '. Bu bağlamı dikkate al. ' if req.history else ''}"
+                        f"{'Kullanıcının sık kullandığı özel kelimeler (mümkünse bunları öner): ' + ', '.join(req.personal_words) + '. ' if req.personal_words else ''}"
                         f"Görevin: Kullanıcının yazmakta olduğu cümlenin devamına gelebilecek EN ALAKALI 3 Türkçe kelimeyi tahmin et. "
                         f"Kural: SADECE 3 kelime, virgülle ayır, başka HİÇBİR şey yazma. "
                         f"Örnek: tarihi,bitişi,teslimi"
